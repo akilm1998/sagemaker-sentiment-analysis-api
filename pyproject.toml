@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sagemaker_sentiment_api"
+version = "0.1.0"
+description = "SageMaker Sentiment Analysis API (portfolio project)"
+authors = [
+    { name = "Akilesh Murugan" }
+]
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    # Core AWS SDKs
+    "boto3",
+    "sagemaker",
+
+    # Hugging Face / Transformers
+    "transformers",
+    "datasets",
+    "torch",
+
+    # Utilities
+    "numpy",
+    "pandas",
+    "requests",
+]
+
+[project.optional-dependencies]
+dev = [
+    # Testing & linting
+    "pytest",
+    "black",
+    "flake8",
+]
+
+[tool.setuptools.packages.find]
+exclude = ["tests*", "notebooks*", "infra*"]

@@ -17,15 +17,34 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Install dependencies
-          command: pip install -r requirements.txt
+          name: Install project & dependencies
+          command: pip install -e .[dev]
       - run:
           name: Run tests
           command: pytest -q --disable-warnings
+
+  lint:
+    executor: python-executor
+    steps:
+      - checkout
+      - run:
+          name: Install project & dev dependencies
+          command: pip install -e .[dev]
+      - run:
+          name: Run Black (formatting check)
+          command: black --check src tests
+      - run:
+          name: Run Flake8 (linting)
+          command: flake8 src tests
 
 workflows:
   version: 2
   verification:
     jobs:
       - test:
+          name: test
+          <<: *deployment-branch-condition
+      - lint:
+          requires: 
+            - test
           <<: *deployment-branch-condition
