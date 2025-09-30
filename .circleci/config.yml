@@ -5,28 +5,27 @@ executors:
     docker:
       - image: cimg/python:3.10
 
+anchors:
+  deployment-branch-condition: &deployment-branch-condition
+    filters:
+      branches:
+        only: main
+
 jobs:
   test:
     executor: python-executor
     steps:
       - checkout
-      - run: pip install -r requirements.txt
       - run:
-          name: Set Python path
-          command: echo 'export PYTHONPATH=$PYTHONPATH:src' >> $BASH_ENV
-      - run: pytest -q --disable-warnings
-
-# 'anchors:' defines reusable configurations, enabling reference
-# throughout the YAML to prevent repetitive declarations.
-anchors:
-
-  deployment-branch-condition: &deployment-branch-condition
-    equal: [main, << pipeline.git.branch >>]
+          name: Install dependencies
+          command: pip install -r requirements.txt
+      - run:
+          name: Run tests
+          command: pytest -q --disable-warnings
 
 workflows:
   version: 2
   verification:
-    when:
-        <<: *deployment-branch-condition
     jobs:
-      - test
+      - test:
+          <<: *deployment-branch-condition
