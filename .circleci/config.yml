@@ -18,23 +18,25 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-            - pip-cache-{{ checksum "pyproject.toml" }}
-            - pip-cache-
+            - poetry-cache-{{ checksum "poetry.lock" }}
+            - poetry-cache-
       - run:
-          name: Create virtualenv and install deps
+          name: Install Poetry (user-local)
           command: |
-            python -m venv .venv
-            . .venv/bin/activate
             python -m pip install --upgrade pip
-            pip install -e .[dev]
+            python -m pip install poetry
+      - run:
+          name: Cache poetry metadata (no install yet)
+          command: |
+            poetry --version
       - save_cache:
           paths:
+            - ~/.cache/pypoetry
             - ~/.cache/pip
-          key: pip-cache-{{ checksum "pyproject.toml" }}
+          key: poetry-cache-{{ checksum "poetry.lock" }}
       - persist_to_workspace:
           root: .
           paths:
-            - .venv
             - pyproject.toml
             - poetry.lock
 
@@ -44,11 +46,22 @@ jobs:
       - checkout
       - attach_workspace:
           at: .
+      - restore_cache:
+          keys:
+            - poetry-cache-{{ checksum "poetry.lock" }}
+            - poetry-cache-
       - run:
-          name: Activate venv and run tests
+          name: Install Poetry and project deps
           command: |
-            . .venv/bin/activate
-            pytest -q
+            python -m pip install --upgrade pip
+            python -m pip install poetry
+            poetry config virtualenvs.create true --local
+            poetry install --no-interaction --no-ansi
+      - run:
+          name: Run tests
+          command: |
+            # ensure we're using poetry venv
+            poetry run pytest -q
 
   lint:
     executor: python-executor
@@ -56,12 +69,23 @@ jobs:
       - checkout
       - attach_workspace:
           at: .
+      - restore_cache:
+          keys:
+            - poetry-cache-{{ checksum "poetry.lock" }}
+            - poetry-cache-
       - run:
-          name: Activate venv and run lint
+          name: Install Poetry and lint deps
           command: |
-            . .venv/bin/activate
-            black --check src tests
-            flake8 src tests
+            python -m pip install --upgrade pip
+            python -m pip install poetry
+            poetry config virtualenvs.create true --local
+            poetry install --no-interaction --no-ansi
+      - run:
+          name: Lint code (fail fast)
+          command: |
+            set -e
+            poetry run black --check src tests
+            poetry run flake8 src tests
 
 workflows:
   version: 2

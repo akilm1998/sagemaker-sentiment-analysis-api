@@ -17,7 +17,7 @@ numpy = "*"
 pandas = "*"
 requests = "*"
 
-[tool.poetry.dev-dependencies]
+[tool.poetry.group.dev.dependencies]  
 pytest = "*"
 black = "*"
 flake8-pyproject = "*"
