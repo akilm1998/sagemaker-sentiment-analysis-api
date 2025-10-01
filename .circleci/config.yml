@@ -12,7 +12,6 @@ anchors:
         only: main
 
 jobs:
-
   prepare:
     executor: python-executor
     steps:
@@ -26,7 +25,7 @@ jobs:
           command: |
             python -m venv .venv
             . .venv/bin/activate
-            pip install --upgrade pip
+            python -m pip install --upgrade pip
             pip install -e .[dev]
       - save_cache:
           paths:
@@ -36,13 +35,20 @@ jobs:
           root: .
           paths:
             - .venv
+            - pyproject.toml
+            - poetry.lock
 
   test:
+    executor: python-executor
     steps:
       - checkout
       - attach_workspace:
           at: .
-      - run: . .venv/bin/activate && pytest -q
+      - run:
+          name: Activate venv and run tests
+          command: |
+            . .venv/bin/activate
+            pytest -q
 
   lint:
     executor: python-executor
@@ -51,20 +57,22 @@ jobs:
       - attach_workspace:
           at: .
       - run:
-          name: Use prepared venv and run lint
+          name: Activate venv and run lint
           command: |
-            . .venv/bin/activate\
-            black --check src tests\
-            flake8 src tests\
+            . .venv/bin/activate
+            black --check src tests
+            flake8 src tests
 
 workflows:
   version: 2
   verification:
     jobs:
+      - prepare
       - test:
-          name: test
+          requires:
+            - prepare
           <<: *deployment-branch-condition
       - lint:
-          requires: 
+          requires:
             - test
           <<: *deployment-branch-condition
