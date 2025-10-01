@@ -1,39 +1,34 @@
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
-
-[project]
+[tool.poetry]
 name = "sagemaker_sentiment_api"
 version = "0.1.0"
 description = "SageMaker Sentiment Analysis API (portfolio project)"
-authors = [
-    { name = "Akilesh Murugan" }
-]
+authors = ["Akilesh Murugan <you@example.com>"]
 readme = "README.md"
-requires-python = ">=3.8"
-dependencies = [
-    # Core AWS SDKs
-    "boto3",
-    "sagemaker",
+packages = [{ include = "src" }]
 
-    # Hugging Face / Transformers
-    "transformers",
-    "datasets",
-    "torch",
+[tool.poetry.dependencies]
+python = ">=3.10"
+boto3 = "*"
+sagemaker = "*"
+transformers = "*"
+datasets = "*"
+torch = "*"
+numpy = "*"
+pandas = "*"
+requests = "*"
 
-    # Utilities
-    "numpy",
-    "pandas",
-    "requests",
-]
+[tool.poetry.dev-dependencies]
+pytest = "*"
+black = "*"
+flake8-pyproject = "*"
 
-[project.optional-dependencies]
-dev = [
-    # Testing & linting
-    "pytest",
-    "black",
-    "flake8",
-]
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
 
-[tool.setuptools.packages.find]
-exclude = ["tests*", "notebooks*", "infra*"]
+[tool.black]
+line-length = 120
+
+[tool.flake8]
+max-line-length = 120
+

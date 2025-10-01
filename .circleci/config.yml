@@ -12,30 +12,50 @@ anchors:
         only: main
 
 jobs:
-  test:
+
+  prepare:
     executor: python-executor
     steps:
       - checkout
+      - restore_cache:
+          keys:
+            - pip-cache-{{ checksum "pyproject.toml" }}
+            - pip-cache-
       - run:
-          name: Install project & dependencies
-          command: pip install -e .[dev]
-      - run:
-          name: Run tests
-          command: pytest -q --disable-warnings
+          name: Create virtualenv and install deps
+          command: |
+            python -m venv .venv
+            . .venv/bin/activate
+            pip install --upgrade pip
+            pip install -e .[dev]
+      - save_cache:
+          paths:
+            - ~/.cache/pip
+          key: pip-cache-{{ checksum "pyproject.toml" }}
+      - persist_to_workspace:
+          root: .
+          paths:
+            - .venv
+
+  test:
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - run: . .venv/bin/activate && pytest -q
 
   lint:
     executor: python-executor
     steps:
       - checkout
+      - attach_workspace:
+          at: .
       - run:
-          name: Install project & dev dependencies
-          command: pip install -e .[dev]
-      - run:
-          name: Run Black (formatting check)
-          command: black --check src tests
-      - run:
-          name: Run Flake8 (linting)
-          command: flake8 src tests
+          name: Use prepared venv and run lint
+          command: |
+            . .venv/bin/activate\
+            black --check src tests\
+            flake8 src tests\
 
 workflows:
   version: 2
