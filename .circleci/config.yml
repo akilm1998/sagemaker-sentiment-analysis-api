@@ -1,19 +1,18 @@
 version: 2.1
 
-executors:
-  python-executor:
-    docker:
-      - image: cimg/python:3.10
+# This file is the "setup" phase only. It starts the agent work,
+# prepares & persists workspace, and then continues with continue_config.yml
 
-anchors:
-  deployment-branch-condition: &deployment-branch-condition
-    filters:
-      branches:
-        only: main
+setup: true
+
+orbs:
+  continuation: circleci/continuation@2.0.1 #https://circleci.com/developer/orbs/orb/circleci/continuation
+  path-filtering: circleci/path-filtering@2.0.4 #https://circleci.com/developer/orbs/orb/circleci/path-filtering
 
 jobs:
   prepare:
-    executor: python-executor
+    docker:
+      - image: cimg/python:3.10
     steps:
       - checkout
       - restore_cache:
@@ -40,63 +39,14 @@ jobs:
             - pyproject.toml
             - poetry.lock
 
-  test:
-    executor: python-executor
-    steps:
-      - checkout
-      - attach_workspace:
-          at: .
-      - restore_cache:
-          keys:
-            - poetry-cache-{{ checksum "poetry.lock" }}
-            - poetry-cache-
-      - run:
-          name: Install Poetry and project deps
-          command: |
-            python -m pip install --upgrade pip
-            python -m pip install poetry
-            poetry config virtualenvs.create true --local
-            poetry install --no-interaction --no-ansi
-      - run:
-          name: Run tests
-          command: |
-            # ensure we're using poetry venv
-            poetry run pytest -q
-
-  lint:
-    executor: python-executor
-    steps:
-      - checkout
-      - attach_workspace:
-          at: .
-      - restore_cache:
-          keys:
-            - poetry-cache-{{ checksum "poetry.lock" }}
-            - poetry-cache-
-      - run:
-          name: Install Poetry and lint deps
-          command: |
-            python -m pip install --upgrade pip
-            python -m pip install poetry
-            poetry config virtualenvs.create true --local
-            poetry install --no-interaction --no-ansi
-      - run:
-          name: Lint code (fail fast)
-          command: |
-            set -e
-            poetry run black --check src tests
-            poetry run flake8 src tests
-
 workflows:
-  version: 2
-  verification:
+  build-setup:
     jobs:
       - prepare
-      - test:
+      - continuation/continue:
           requires:
             - prepare
-          <<: *deployment-branch-condition
-      - lint:
-          requires:
-            - test
-          <<: *deployment-branch-condition
+          # path to the config you want to continue into
+          configuration_path: .circleci/continue_config.yml
+          # optional: parameters can be passed as a JSON string
+          # parameters: '{ "some_flag": true }'

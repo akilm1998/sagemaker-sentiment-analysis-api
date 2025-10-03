@@ -21,6 +21,7 @@ override.tf.json
 
 # Local plan files
 *.tfplan
+*tfplan
 
 # Keep lock file committed
 !.terraform.lock.hcl

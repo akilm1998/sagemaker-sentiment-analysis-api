@@ -1,0 +1,105 @@
+version: 2.1
+orbs:
+  continuation: circleci/continuation@2.0.1 # https://circleci.com/developer/orbs/orb/circleci/continuation
+  path-filtering: circleci/path-filtering@2.0.4 #https://circleci.com/developer/orbs/orb/circleci/path-filtering
+
+executors:
+  python-executor:
+    docker:
+      - image: cimg/python:3.10
+
+anchors:
+  deployment-branch-condition: &deployment-branch-condition
+    filters:
+      branches:
+        only: main
+
+jobs:
+  prepare:
+    executor: python-executor
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - poetry-cache-{{ checksum "poetry.lock" }}
+            - poetry-cache-
+      - run:
+          name: Install Poetry (user-local)
+          command: |
+            python -m pip install --upgrade pip
+            python -m pip install poetry
+      - run:
+          name: Cache poetry metadata (no install yet)
+          command: |
+            poetry --version
+      - save_cache:
+          paths:
+            - ~/.cache/pypoetry
+            - ~/.cache/pip
+          key: poetry-cache-{{ checksum "poetry.lock" }}
+      - persist_to_workspace:
+          root: .
+          paths:
+            - pyproject.toml
+            - poetry.lock
+
+  test:
+    executor: python-executor
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - restore_cache:
+          keys:
+            - poetry-cache-{{ checksum "poetry.lock" }}
+            - poetry-cache-
+      - run:
+          name: Install Poetry and project deps
+          command: |
+            python -m pip install --upgrade pip
+            python -m pip install poetry
+            poetry config virtualenvs.create true --local
+            poetry install --no-interaction --no-ansi
+      - run:
+          name: Run tests
+          command: |
+            # ensure we're using poetry venv
+            poetry run pytest -q
+
+  lint:
+    executor: python-executor
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - restore_cache:
+          keys:
+            - poetry-cache-{{ checksum "poetry.lock" }}
+            - poetry-cache-
+      - run:
+          name: Install Poetry and lint deps
+          command: |
+            python -m pip install --upgrade pip
+            python -m pip install poetry
+            poetry config virtualenvs.create true --local
+            poetry install --no-interaction --no-ansi
+      - run:
+          name: Lint code (fail fast)
+          command: |
+            set -e
+            poetry run black --check src tests
+            poetry run flake8 src tests
+
+workflows:
+  version: 2
+  verification:
+    jobs:
+      - prepare
+      - test:
+          requires:
+            - prepare
+          <<: *deployment-branch-condition
+      - lint:
+          requires:
+            - test
+          <<: *deployment-branch-condition
