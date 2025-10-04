@@ -81,6 +81,13 @@ jobs:
       - checkout
 
       - run:
+          name: Install AWS CLI (pip)
+          command: |
+            python -m pip install --upgrade pip
+            python -m pip install --upgrade awscli
+            aws --version
+
+      - run:
           name: Validate input and OIDC token
           command: |
             set -euo pipefail
@@ -98,22 +105,18 @@ jobs:
           name: Assume role (OIDC) and export temporary credentials
           command: |
             set -euo pipefail
-
             ROLE_ARN="<< parameters.role_arn >>"
             SESSION_NAME="circleci-oidc-$(date +%s)"
-
             CREDS_JSON=$(aws sts assume-role-with-web-identity \
               --role-arn "${ROLE_ARN}" \
               --role-session-name "${SESSION_NAME}" \
               --web-identity-token "${CIRCLE_OIDC_TOKEN}" \
               --duration-seconds 900)
 
-            # Extract creds using Python (parsing from stdin)
             export AWS_ACCESS_KEY_ID=$(printf '%s' "$CREDS_JSON" | python -c 'import sys, json; print(json.load(sys.stdin)["Credentials"]["AccessKeyId"])')
             export AWS_SECRET_ACCESS_KEY=$(printf '%s' "$CREDS_JSON" | python -c 'import sys, json; print(json.load(sys.stdin)["Credentials"]["SecretAccessKey"])')
             export AWS_SESSION_TOKEN=$(printf '%s' "$CREDS_JSON" | python -c 'import sys, json; print(json.load(sys.stdin)["Credentials"]["SessionToken"])')
 
-            # Confirm we assumed the role (does not print secrets)
             echo "Assumed role — caller identity:"
             aws sts get-caller-identity
 
