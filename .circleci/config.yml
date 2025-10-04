@@ -38,69 +38,69 @@ jobs:
   #         paths:
   #           - pyproject.toml
   #           - poetry.lock
-clear-caches:
-  docker:
-    - image: cimg/base:stable
-  steps:
-    - run:
-        name: Validate inputs
-        command: |
-          set -euo pipefail
-          if [ -z "${CIRCLECI_API_TOKEN}" ]; then
-            echo "ERROR: CIRCLECI_API_TOKEN environment variable not set in context 'circleci'."
-            exit 1
-          fi
-          echo "Using CircleCI API token from context 'circleci'."
-
-          # We derive project info from the known project URL you supplied
-          ORG="akilm1998"
-          REPO="sagemaker-sentiment-analysis-api"
-          SLUG="gh/${ORG}/${REPO}"
-
-          echo "Project slug: ${SLUG}"
-          echo "This job will delete caches with prefix: poetry-cache-v1-"
-
-    - run:
-        name: Delete caches with prefix poetry-cache-v1-
-        command: |
-          set -euo pipefail
-
-          ORG="akilm1998"
-          REPO="sagemaker-sentiment-analysis-api"
-          PREFIX="poetry-cache-"
-          PROJECT_SLUG="gh/${ORG}/${REPO}"
-
-          echo "Requesting cache deletion for project ${PROJECT_SLUG} with prefix '${PREFIX}'..."
-
-          # CircleCI API: delete caches by prefix
-          # Note: API requires token in basic auth format: -u TOKEN:
-          HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/clear-cache-response.json \
-            -X DELETE \
-            -u "${CIRCLECI_API_TOKEN}:" \
-            "https://circleci.com/api/v2/project/${PROJECT_SLUG}/cache?key=${PREFIX" || true)
-
-          # If curl failed at transport level the previous line may have failed; handle gracefully
-          if [ -s /tmp/clear-cache-response.json ]; then
-            echo "API response body:"
-            cat /tmp/clear-cache-response.json || true
-          fi
-
-          # Try to parse the HTTP code printed by curl
-          # Note: If curl failed early the HTTP_CODE variable may be empty — handle that
-          if [ -n "${HTTP_CODE:-}" ]; then
-            echo "HTTP status: ${HTTP_CODE}"
-            if [ "${HTTP_CODE}" = "204" ] || [ "${HTTP_CODE}" = "200" ]; then
-              echo "Cache deletion request accepted."
-            else
-              echo "Cache deletion request returned status ${HTTP_CODE}. Check /tmp/clear-cache-response.json for details."
+  clear-caches:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - run:
+          name: Validate inputs
+          command: |
+            set -euo pipefail
+            if [ -z "${CIRCLECI_API_TOKEN}" ]; then
+              echo "ERROR: CIRCLECI_API_TOKEN environment variable not set in context 'circleci'."
               exit 1
             fi
-          else
-            echo "No HTTP status captured from curl; check the API output above."
-            exit 1
-          fi
+            echo "Using CircleCI API token from context 'circleci'."
 
-          echo "Done."
+            # We derive project info from the known project URL you supplied
+            ORG="akilm1998"
+            REPO="sagemaker-sentiment-analysis-api"
+            SLUG="gh/${ORG}/${REPO}"
+
+            echo "Project slug: ${SLUG}"
+            echo "This job will delete caches with prefix: poetry-cache-v1-"
+
+      - run:
+          name: Delete caches with prefix poetry-cache-v1-
+          command: |
+            set -euo pipefail
+
+            ORG="akilm1998"
+            REPO="sagemaker-sentiment-analysis-api"
+            PREFIX="poetry-cache-"
+            PROJECT_SLUG="gh/${ORG}/${REPO}"
+
+            echo "Requesting cache deletion for project ${PROJECT_SLUG} with prefix '${PREFIX}'..."
+
+            # CircleCI API: delete caches by prefix
+            # Note: API requires token in basic auth format: -u TOKEN:
+            HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/clear-cache-response.json \
+              -X DELETE \
+              -u "${CIRCLECI_API_TOKEN}:" \
+              "https://circleci.com/api/v2/project/${PROJECT_SLUG}/cache?key=${PREFIX" || true)
+
+            # If curl failed at transport level the previous line may have failed; handle gracefully
+            if [ -s /tmp/clear-cache-response.json ]; then
+              echo "API response body:"
+              cat /tmp/clear-cache-response.json || true
+            fi
+
+            # Try to parse the HTTP code printed by curl
+            # Note: If curl failed early the HTTP_CODE variable may be empty — handle that
+            if [ -n "${HTTP_CODE:-}" ]; then
+              echo "HTTP status: ${HTTP_CODE}"
+              if [ "${HTTP_CODE}" = "204" ] || [ "${HTTP_CODE}" = "200" ]; then
+                echo "Cache deletion request accepted."
+              else
+                echo "Cache deletion request returned status ${HTTP_CODE}. Check /tmp/clear-cache-response.json for details."
+                exit 1
+              fi
+            else
+              echo "No HTTP status captured from curl; check the API output above."
+              exit 1
+            fi
+
+            echo "Done."
 
 
 workflows:
