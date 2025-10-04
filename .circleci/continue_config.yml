@@ -8,9 +8,9 @@ parameters:
     description: "Optional: role ARN to assume. If empty, the job will error and ask you to pass one."
 
 orbs:
-  path-filtering: circleci/path-filtering@2.0.4
-  terraform: circleci/terraform@3.7.0
-  aws-cli: circleci/aws-cli@2.2.0
+  path-filtering: circleci/path-filtering@2.0.4 #https://circleci.com/developer/orbs/orb/circleci/path-filtering
+  terraform: circleci/terraform@3.7.0 #https://circleci.com/developer/orbs/orb/circleci/terraform
+  aws-cli: circleci/aws-cli@5.4.1 #https://circleci.com/developer/orbs/orb/circleci/aws-cli
 
 executors:
   python-executor:
