@@ -38,6 +38,7 @@ jobs:
   #         paths:
   #           - pyproject.toml
   #           - poetry.lock
+
   clear-caches:
     docker:
       - image: cimg/base:stable
@@ -58,10 +59,10 @@ jobs:
             SLUG="gh/${ORG}/${REPO}"
 
             echo "Project slug: ${SLUG}"
-            echo "This job will delete caches with prefix: poetry-cache-v1-"
+            echo "This job will delete caches with prefix: poetry-cache-"
 
       - run:
-          name: Delete caches with prefix poetry-cache-v1-
+          name: Delete caches with prefix poetry-cache-
           command: |
             set -euo pipefail
 
@@ -72,21 +73,19 @@ jobs:
 
             echo "Requesting cache deletion for project ${PROJECT_SLUG} with prefix '${PREFIX}'..."
 
-            # CircleCI API: delete caches by prefix
-            # Note: API requires token in basic auth format: -u TOKEN:
-            HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/clear-cache-response.json \
-              -X DELETE \
-              -u "${CIRCLECI_API_TOKEN}:" \
-              "https://circleci.com/api/v2/project/${PROJECT_SLUG}/cache?key=${PREFIX" || true)
+            # Use curl to delete caches by prefix and capture HTTP status code.
+            HTTP_CODE=$(
+              curl -s -w "%{http_code}" -o /tmp/clear-cache-response.json \
+                -X DELETE \
+                -u "${CIRCLECI_API_TOKEN}:" \
+                "https://circleci.com/api/v2/project/${PROJECT_SLUG}/cache?key=${PREFIX}"
+            ) || true
 
-            # If curl failed at transport level the previous line may have failed; handle gracefully
             if [ -s /tmp/clear-cache-response.json ]; then
               echo "API response body:"
               cat /tmp/clear-cache-response.json || true
             fi
 
-            # Try to parse the HTTP code printed by curl
-            # Note: If curl failed early the HTTP_CODE variable may be empty — handle that
             if [ -n "${HTTP_CODE:-}" ]; then
               echo "HTTP status: ${HTTP_CODE}"
               if [ "${HTTP_CODE}" = "204" ] || [ "${HTTP_CODE}" = "200" ]; then
@@ -101,7 +100,6 @@ jobs:
             fi
 
             echo "Done."
-
 
 workflows:
   build-setup:
