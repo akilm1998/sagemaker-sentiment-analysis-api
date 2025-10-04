@@ -10,7 +10,6 @@ parameters:
 orbs:
   path-filtering: circleci/path-filtering@2.0.4 # https://circleci.com/developer/orbs/orb/circleci/path-filtering
   terraform: circleci/terraform@3.7.0            # https://circleci.com/developer/orbs/orb/circleci/terraform
-  aws-cli: circleci/aws-cli@5.4.1               # official AWS CLI orb (version used in your file)
 
 executors:
   python-executor:
@@ -81,9 +80,6 @@ jobs:
     steps:
       - checkout
 
-      - aws-cli/install:
-          install_pip_packages: false
-
       - run:
           name: Validate input and OIDC token
           command: |
@@ -112,11 +108,11 @@ jobs:
               --web-identity-token "${CIRCLE_OIDC_TOKEN}" \
               --duration-seconds 900)
 
+            # Extract creds using Python (avoids using `<<<` which breaks CircleCI interpolation)
             export AWS_ACCESS_KEY_ID=$(printf '%s' "$CREDS_JSON" | python -c 'import sys, json; print(json.load(sys.stdin)["Credentials"]["AccessKeyId"])')
             export AWS_SECRET_ACCESS_KEY=$(printf '%s' "$CREDS_JSON" | python -c 'import sys, json; print(json.load(sys.stdin)["Credentials"]["SecretAccessKey"])')
             export AWS_SESSION_TOKEN=$(printf '%s' "$CREDS_JSON" | python -c 'import sys, json; print(json.load(sys.stdin)["Credentials"]["SessionToken"])')
 
-            # Confirm we assumed the role (does not print secrets)
             echo "Assumed role — caller identity:"
             aws sts get-caller-identity
 
