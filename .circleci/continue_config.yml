@@ -4,13 +4,13 @@ version: 2.1
 parameters:
   role_arn:
     type: string
-    default: "arn:aws:iam::313078327096:role/circleci-oidc-role" 
+    default: "arn:aws:iam::313078327096:role/circleci-oidc-role"
     description: "Optional: role ARN to assume. If empty, the job will error and ask you to pass one."
 
 orbs:
-  path-filtering: circleci/path-filtering@2.0.4 #https://circleci.com/developer/orbs/orb/circleci/path-filtering
-  terraform: circleci/terraform@3.7.0 #https://circleci.com/developer/orbs/orb/circleci/terraform
-  aws-cli: circleci/aws-cli@5.4.1 #https://circleci.com/developer/orbs/orb/circleci/aws-cli
+  path-filtering: circleci/path-filtering@2.0.4 # https://circleci.com/developer/orbs/orb/circleci/path-filtering
+  terraform: circleci/terraform@3.7.0            # https://circleci.com/developer/orbs/orb/circleci/terraform
+  aws-cli: circleci/aws-cli@5.4.1               # official AWS CLI orb (version used in your file)
 
 executors:
   python-executor:
@@ -112,11 +112,11 @@ jobs:
               --web-identity-token "${CIRCLE_OIDC_TOKEN}" \
               --duration-seconds 900)
 
-            # Extract creds using Python (avoid jq)
-            export AWS_ACCESS_KEY_ID=$(python -c "import sys, json; print(json.load(sys.stdin)['Credentials']['AccessKeyId'])" <<< "$CREDS_JSON")
-            export AWS_SECRET_ACCESS_KEY=$(python -c "import sys, json; print(json.load(sys.stdin)['Credentials']['SecretAccessKey'])" <<< "$CREDS_JSON")
-            export AWS_SESSION_TOKEN=$(python -c "import sys, json; print(json.load(sys.stdin)['Credentials']['SessionToken'])" <<< "$CREDS_JSON")
+            export AWS_ACCESS_KEY_ID=$(printf '%s' "$CREDS_JSON" | python -c 'import sys, json; print(json.load(sys.stdin)["Credentials"]["AccessKeyId"])')
+            export AWS_SECRET_ACCESS_KEY=$(printf '%s' "$CREDS_JSON" | python -c 'import sys, json; print(json.load(sys.stdin)["Credentials"]["SecretAccessKey"])')
+            export AWS_SESSION_TOKEN=$(printf '%s' "$CREDS_JSON" | python -c 'import sys, json; print(json.load(sys.stdin)["Credentials"]["SessionToken"])')
 
+            # Confirm we assumed the role (does not print secrets)
             echo "Assumed role — caller identity:"
             aws sts get-caller-identity
 
@@ -124,7 +124,6 @@ jobs:
           name: Example AWS action (List S3 buckets)
           command: |
             aws s3 ls
-
 
 workflows:
   version: 2
