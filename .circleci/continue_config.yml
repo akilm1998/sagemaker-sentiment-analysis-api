@@ -1,11 +1,16 @@
 version: 2.1
 
-# This is the config that the continuation orb will load.
-# It must be a valid, self-contained CircleCI config for the remainder of the pipelines.
+# Pipeline parameter: pass a role ARN at pipeline trigger time
+parameters:
+  role_arn:
+    type: string
+    default: "arn:aws:iam::313078327096:role/circleci-oidc-role" 
+    description: "Optional: role ARN to assume. If empty, the job will error and ask you to pass one."
 
 orbs:
-  path-filtering: circleci/path-filtering@2.0.4 #https://circleci.com/developer/orbs/orb/circleci/path-filtering
-  terraform: circleci/terraform@3.7.0 #https://circleci.com/developer/orbs/orb/circleci/terraform
+  path-filtering: circleci/path-filtering@2.0.4
+  terraform: circleci/terraform@3.7.0
+  aws-cli: circleci/aws-cli@2.2.0
 
 executors:
   python-executor:
@@ -39,7 +44,6 @@ jobs:
       - run:
           name: Run tests
           command: |
-            # ensure we're using poetry venv
             poetry run pytest -q
 
   lint:
@@ -66,6 +70,75 @@ jobs:
             poetry run black --check src tests
             poetry run flake8 src tests
 
+  # Reusable assume-role job: accepts role_arn as a job parameter
+  assume-role-job:
+    executor: python-executor
+    parameters:
+      role_arn:
+        type: string
+        default: ""
+        description: "The AWS role ARN to assume via OIDC (required)"
+    steps:
+      - checkout
+
+      - aws-cli/install:
+          install_pip_packages: false
+
+      - run:
+          name: Validate input and OIDC token
+          command: |
+            set -euo pipefail
+            if [ -z "<< parameters.role_arn >>" ]; then
+              echo "ERROR: role_arn parameter is empty. Provide the role ARN by passing the pipeline parameter 'role_arn' or override in workflow."
+              exit 1
+            fi
+            if [ -z "${CIRCLE_OIDC_TOKEN:-}" ]; then
+              echo "ERROR: CIRCLE_OIDC_TOKEN not present. Ensure OIDC is enabled for this CircleCI project."
+              exit 1
+            fi
+            echo "role_arn and CIRCLE_OIDC_TOKEN present."
+
+      - run:
+          name: Assume role (OIDC) and export temporary credentials (jq-free)
+          command: |
+            set -euo pipefail
+
+            ROLE_ARN="<< parameters.role_arn >>"
+            SESSION_NAME="circleci-oidc-$(date +%s)"
+
+            CREDS_JSON=$(aws sts assume-role-with-web-identity \
+              --role-arn "${ROLE_ARN}" \
+              --role-session-name "${SESSION_NAME}" \
+              --web-identity-token "${CIRCLE_OIDC_TOKEN}" \
+              --duration-seconds 900)
+
+            # Extract creds using Python to avoid jq
+            export AWS_ACCESS_KEY_ID=$(python - <<PY
+import sys,json
+print(json.load(sys.stdin)['Credentials']['AccessKeyId'])
+PY
+<<< "$CREDS_JSON")
+
+            export AWS_SECRET_ACCESS_KEY=$(python - <<PY
+import sys,json
+print(json.load(sys.stdin)['Credentials']['SecretAccessKey'])
+PY
+<<< "$CREDS_JSON")
+
+            export AWS_SESSION_TOKEN=$(python - <<PY
+import sys,json
+print(json.load(sys.stdin)['Credentials']['SessionToken'])
+PY
+<<< "$CREDS_JSON")
+
+            echo "Assumed role — caller identity:"
+            aws sts get-caller-identity
+
+      - run:
+          name: Example AWS action (List S3 buckets)
+          command: |
+            aws s3 ls
+
 workflows:
   version: 2
   verification:
@@ -76,3 +149,9 @@ workflows:
           requires:
             - test
           <<: *deployment-branch-condition
+      - assume-role-job:
+          requires:
+            - lint
+          <<: *deployment-branch-condition
+          # Pass the pipeline parameter into the job. You can override when triggering the pipeline.
+          role_arn: << pipeline.parameters.role_arn >>
