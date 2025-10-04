@@ -99,7 +99,7 @@ jobs:
             echo "role_arn and CIRCLE_OIDC_TOKEN present."
 
       - run:
-          name: Assume role (OIDC) and export temporary credentials (jq-free)
+          name: Assume role (OIDC) and export temporary credentials
           command: |
             set -euo pipefail
 
@@ -112,24 +112,10 @@ jobs:
               --web-identity-token "${CIRCLE_OIDC_TOKEN}" \
               --duration-seconds 900)
 
-            # Extract creds using Python to avoid jq
-            export AWS_ACCESS_KEY_ID=$(python - <<PY
-import sys,json
-print(json.load(sys.stdin)['Credentials']['AccessKeyId'])
-PY
-<<< "$CREDS_JSON")
-
-            export AWS_SECRET_ACCESS_KEY=$(python - <<PY
-import sys,json
-print(json.load(sys.stdin)['Credentials']['SecretAccessKey'])
-PY
-<<< "$CREDS_JSON")
-
-            export AWS_SESSION_TOKEN=$(python - <<PY
-import sys,json
-print(json.load(sys.stdin)['Credentials']['SessionToken'])
-PY
-<<< "$CREDS_JSON")
+            # Extract creds using Python (avoid jq)
+            export AWS_ACCESS_KEY_ID=$(python -c "import sys, json; print(json.load(sys.stdin)['Credentials']['AccessKeyId'])" <<< "$CREDS_JSON")
+            export AWS_SECRET_ACCESS_KEY=$(python -c "import sys, json; print(json.load(sys.stdin)['Credentials']['SecretAccessKey'])" <<< "$CREDS_JSON")
+            export AWS_SESSION_TOKEN=$(python -c "import sys, json; print(json.load(sys.stdin)['Credentials']['SessionToken'])" <<< "$CREDS_JSON")
 
             echo "Assumed role — caller identity:"
             aws sts get-caller-identity
@@ -138,6 +124,7 @@ PY
           name: Example AWS action (List S3 buckets)
           command: |
             aws s3 ls
+
 
 workflows:
   version: 2
