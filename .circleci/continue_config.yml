@@ -32,7 +32,7 @@ jobs:
           at: .
       - restore_cache:
           keys:
-            - poetry-cache-{{ checksum "poetry.lock" }}
+            - poetry-cache-v1-{{ checksum "poetry.lock" }}
             # - poetry-cache-
       - run:
           name: Install Poetry and project deps
@@ -54,7 +54,7 @@ jobs:
           at: .
       - restore_cache:
           keys:
-            - poetry-cache-{{ checksum "poetry.lock" }}
+            - poetry-cache-v1-{{ checksum "poetry.lock" }}
             # - poetry-cache-
       - run:
           name: Install Poetry and lint deps
@@ -85,7 +85,7 @@ jobs:
 
       - restore_cache:
           keys:
-            - poetry-cache-{{ checksum "poetry.lock" }}
+            - poetry-cache-v1-{{ checksum "poetry.lock" }}
             # - poetry-cache-
 
       - run:

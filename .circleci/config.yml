@@ -17,7 +17,7 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-            - poetry-cache-{{ checksum "poetry.lock" }}
+            - poetry-cache-v1-{{ checksum "poetry.lock" }}
             # - poetry-cache-
       - run:
           name: Install Poetry (user-local)
