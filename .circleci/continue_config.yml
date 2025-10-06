@@ -70,7 +70,6 @@ jobs:
             poetry run black --check src tests
             poetry run flake8 src tests
 
-  # assume-role-job: activates the poetry venv once and uses the installed awscli
   assume-role-job:
     executor: python-executor
     parameters:
@@ -86,7 +85,6 @@ jobs:
       - restore_cache:
           keys:
             - poetry-cache-v2-{{ checksum "poetry.lock" }}
-            # - poetry-cache-
 
       - run:
           name: Install Poetry and project deps (includes awscli)
@@ -96,28 +94,17 @@ jobs:
             python -m pip install poetry
             poetry config virtualenvs.create true --local
             poetry install --no-interaction --no-ansi
-            # show aws version from venv for debug
-            poetry run aws --version
 
-      - run:
-          name: Activate poetry venv and verify aws available
-          command: |
-            set -euo pipefail
-            VENV_PATH=$(poetry env info -p)
-            if [ -z "${VENV_PATH:-}" ]; then
-              echo "ERROR: poetry did not create a venv. Check poetry config."
-              exit 1
-            fi
-            # shellcheck disable=SC1091
-            source "${VENV_PATH}/bin/activate"
-            aws --version
+            echo "poetry venv path: $(poetry env info -p || echo 'none')"
+            echo "Verify aws present via poetry:"
+            poetry run aws --version || (echo "poetry-run aws not found; check awscli in pyproject" && exit 1)
 
       - run:
           name: Validate input and OIDC token
           command: |
             set -euo pipefail
             if [ -z "<< parameters.role_arn >>" ]; then
-              echo "ERROR: role_arn parameter is empty. Provide the role ARN by passing the pipeline parameter 'role_arn' or override in workflow."
+              echo "ERROR: role_arn parameter is empty. Provide the role ARN by passing the pipeline parameter 'role_arn'."
               exit 1
             fi
             if [ -z "${CIRCLE_OIDC_TOKEN:-}" ]; then
@@ -127,29 +114,36 @@ jobs:
             echo "role_arn and CIRCLE_OIDC_TOKEN present."
 
       - run:
-          name: Assume role (OIDC) and export temporary credentials
+          name: Assume role (OIDC) via poetry-run aws and export temporary credentials
           command: |
             set -euo pipefail
+
             ROLE_ARN="<< parameters.role_arn >>"
             SESSION_NAME="circleci-oidc-$(date +%s)"
 
-            CREDS_JSON=$(aws sts assume-role-with-web-identity \
+            echo "Assuming role: ${ROLE_ARN} (session: ${SESSION_NAME})"
+
+            CREDS_JSON=$(poetry run aws sts assume-role-with-web-identity \
               --role-arn "${ROLE_ARN}" \
               --role-session-name "${SESSION_NAME}" \
               --web-identity-token "${CIRCLE_OIDC_TOKEN}" \
               --duration-seconds 900)
 
-            export AWS_ACCESS_KEY_ID=$(printf '%s' "$CREDS_JSON" | python -c 'import sys, json; print(json.load(sys.stdin)["Credentials"]["AccessKeyId"])')
-            export AWS_SECRET_ACCESS_KEY=$(printf '%s' "$CREDS_JSON" | python -c 'import sys, json; print(json.load(sys.stdin)["Credentials"]["SecretAccessKey"])')
-            export AWS_SESSION_TOKEN=$(printf '%s' "$CREDS_JSON" | python -c 'import sys, json; print(json.load(sys.stdin)["Credentials"]["SessionToken"])')
+            # Extract creds using poetry-run python (avoid relying on shell here-docs)
+            export AWS_ACCESS_KEY_ID=$(printf '%s' "$CREDS_JSON" | poetry run python -c 'import sys, json; print(json.load(sys.stdin)["Credentials"]["AccessKeyId"])')
+            export AWS_SECRET_ACCESS_KEY=$(printf '%s' "$CREDS_JSON" | poetry run python -c 'import sys, json; print(json.load(sys.stdin)["Credentials"]["SecretAccessKey"])')
+            export AWS_SESSION_TOKEN=$(printf '%s' "$CREDS_JSON" | poetry run python -c 'import sys, json; print(json.load(sys.stdin)["Credentials"]["SessionToken"])')
 
-            echo "Assumed role — caller identity:"
-            aws sts get-caller-identity
+            echo "Assumed role — caller identity (should show assumed arn):"
+            poetry run aws sts get-caller-identity
 
       - run:
           name: Example AWS action (List S3 buckets)
           command: |
-            aws s3 ls
+            set -euo pipefail
+            # aws is invoked through poetry so it runs inside the venv where awscli is installed
+            poetry run aws s3 ls
+
 
 workflows:
   version: 2
