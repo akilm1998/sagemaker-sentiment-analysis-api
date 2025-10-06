@@ -100,49 +100,60 @@ jobs:
             poetry run aws --version || (echo "poetry-run aws not found; check awscli in pyproject" && exit 1)
 
       - run:
-          name: Validate input and OIDC token
+          name: Assume role (OIDC) and run AWS actions (single shell)
           command: |
+            # single shell so exported envs persist for following aws calls
             set -euo pipefail
+
+            # input validation
             if [ -z "<< parameters.role_arn >>" ]; then
-              echo "ERROR: role_arn parameter is empty. Provide the role ARN by passing the pipeline parameter 'role_arn'."
+              echo "ERROR: role_arn parameter is empty. Provide the role ARN by passing pipeline parameter 'role_arn'."
               exit 1
             fi
             if [ -z "${CIRCLE_OIDC_TOKEN:-}" ]; then
               echo "ERROR: CIRCLE_OIDC_TOKEN not present. Ensure OIDC is enabled for this CircleCI project."
               exit 1
             fi
-            echo "role_arn and CIRCLE_OIDC_TOKEN present."
-
-      - run:
-          name: Assume role (OIDC) via poetry-run aws and export temporary credentials
-          command: |
-            set -euo pipefail
 
             ROLE_ARN="<< parameters.role_arn >>"
             SESSION_NAME="circleci-oidc-$(date +%s)"
 
-            echo "Assuming role: ${ROLE_ARN} (session: ${SESSION_NAME})"
+            echo "Attempting to assume role: ${ROLE_ARN}, session: ${SESSION_NAME}"
 
+            # Run assume-role-with-web-identity via poetry so aws binary resolves
             CREDS_JSON=$(poetry run aws sts assume-role-with-web-identity \
               --role-arn "${ROLE_ARN}" \
               --role-session-name "${SESSION_NAME}" \
               --web-identity-token "${CIRCLE_OIDC_TOKEN}" \
-              --duration-seconds 900)
+              --duration-seconds 900) || {
+                echo "ERROR: assume-role-with-web-identity failed. See output above."
+                exit 1
+              }
 
-            # Extract creds using poetry-run python (avoid relying on shell here-docs)
-            export AWS_ACCESS_KEY_ID=$(printf '%s' "$CREDS_JSON" | poetry run python -c 'import sys, json; print(json.load(sys.stdin)["Credentials"]["AccessKeyId"])')
-            export AWS_SECRET_ACCESS_KEY=$(printf '%s' "$CREDS_JSON" | poetry run python -c 'import sys, json; print(json.load(sys.stdin)["Credentials"]["SecretAccessKey"])')
-            export AWS_SESSION_TOKEN=$(printf '%s' "$CREDS_JSON" | poetry run python -c 'import sys, json; print(json.load(sys.stdin)["Credentials"]["SessionToken"])')
+            # quick check the JSON is not empty
+            if [ -z "${CREDS_JSON:-}" ] || ! printf '%s' "$CREDS_JSON" | grep -q '"Credentials"'; then
+              echo "ERROR: assume-role returned no credentials. Dumping response:"
+              printf '%s\n' "$CREDS_JSON"
+              exit 1
+            fi
 
-            echo "Assumed role — caller identity (should show assumed arn):"
+            # Extract creds (poetry-run python to ensure same venv python)
+            export AWS_ACCESS_KEY_ID=$(printf '%s' "$CREDS_JSON" | poetry run python -c 'import sys,json; print(json.load(sys.stdin)["Credentials"]["AccessKeyId"])')
+            export AWS_SECRET_ACCESS_KEY=$(printf '%s' "$CREDS_JSON" | poetry run python -c 'import sys,json; print(json.load(sys.stdin)["Credentials"]["SecretAccessKey"])')
+            export AWS_SESSION_TOKEN=$(printf '%s' "$CREDS_JSON" | poetry run python -c 'import sys,json; print(json.load(sys.stdin)["Credentials"]["SessionToken"])')
+
+            echo "Temporary AWS creds exported in this shell (will persist for the rest of this step)."
+
+            # Verify the assumed identity
+            echo "Caller identity (should show assumed role ARN):"
             poetry run aws sts get-caller-identity
 
-      - run:
-          name: Example AWS action (List S3 buckets)
-          command: |
-            set -euo pipefail
-            # aws is invoked through poetry so it runs inside the venv where awscli is installed
+            # Example AWS action using the temporary creds
+            echo "Listing S3 buckets (using assumed role credentials):"
             poetry run aws s3 ls
+
+            echo "Done. If you need these creds in later steps, we can write them to a file and persist to workspace."
+
 
 
 workflows:
