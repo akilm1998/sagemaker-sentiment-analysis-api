@@ -9,22 +9,22 @@ packages = [{ include = "src" }]
 [tool.poetry.dependencies]
 python = ">=3.10"
 boto3 = "*"
-sagemaker = "*"
-transformers = "*"
+sagemaker = ">=2.205.0,<2.210.0"
+transformers = ">=4.41.0,<4.45.0"
+torch = ">=2.3.0,<2.5.0"
 datasets = "*"
-torch = "*"
 numpy = "*"
 pandas = "*"
 requests = "*"
 
-[tool.poetry.group.dev.dependencies]  
-pytest = "*"
-black = "*"
-flake8-pyproject = "*"
-awscli = "*"
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8.0.0"
+black = ">=24.0.0"
+flake8-pyproject = ">=1.2.3"
+awscli = ">=1.32.0"
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
+requires = ["poetry-core>=1.8.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.black]
