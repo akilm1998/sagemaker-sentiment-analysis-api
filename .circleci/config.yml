@@ -106,9 +106,9 @@ workflows:
   build-setup:
     jobs:
       - prepare
-      - path-filtering/set-parameters:
-          mapping: |
-            infra/.* deploy-terraform true
+      # - path-filtering/set-parameters:
+      #     mapping: |
+      #       infra/.* deploy-terraform true
       - continuation/continue:
           requires:
             - prepare
