@@ -7,6 +7,10 @@ parameters:
     default: "arn:aws:iam::313078327096:role/circleci-oidc-role"
     description: "Optional: role ARN to assume. If empty, the job will error and ask you to pass one."
 
+  deploy-terraform:
+    type: boolean
+    default: false
+
 orbs:
   continuation: circleci/continuation@2.0.1
   path-filtering: circleci/path-filtering@2.0.4
@@ -153,8 +157,18 @@ jobs:
             poetry run aws s3 ls
 
             echo "Done. If you need these creds in later steps, we can write them to a file and persist to workspace."
+            cd infra/circleci-oidc
+            terraform init -input=false
+            terraform plan -input=false -out=tfplan || (terraform show -json tfplan || true)
+            terraform apply -auto-approve tfplan
 
-
+      # - when:
+      #     condition: << parameters.deploy-terraform >>
+      #     steps:
+      #       - run:
+      #           name: Terraform Deploy (OIDC infra then main infra)
+      #           command: |
+      #             set -euo pipefail
 
 workflows:
   version: 2
