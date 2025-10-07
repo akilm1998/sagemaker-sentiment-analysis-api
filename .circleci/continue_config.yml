@@ -74,72 +74,72 @@ jobs:
             poetry run black --check src tests
             poetry run flake8 src tests
 
-assume-role-job:
-  docker:
-    - image: hashicorp/terraform:latest
-  parameters:
-    role_arn:
-      type: string
-      default: ""
-      description: "The AWS role ARN to assume via OIDC (required)"
-  steps:
-    - checkout
-    - attach_workspace:
-        at: .
+  assume-role-job:
+    docker:
+      - image: hashicorp/terraform:latest
+    parameters:
+      role_arn:
+        type: string
+        default: ""
+        description: "The AWS role ARN to assume via OIDC (required)"
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
 
-    - restore_cache:
-        keys:
-          - poetry-cache-v2-{{ checksum "poetry.lock" }}
+      - restore_cache:
+          keys:
+            - poetry-cache-v2-{{ checksum "poetry.lock" }}
 
-    - run:
-        name: Install Python, Poetry, and AWS CLI
-        command: |
-          set -euo pipefail
-          apt-get update -y
-          apt-get install -y python3 python3-pip python3-venv curl
-          python3 -m pip install --upgrade pip
-          python3 -m pip install poetry awscli
-          poetry --version
-          aws --version
+      - run:
+          name: Install Python, Poetry, and AWS CLI
+          command: |
+            set -euo pipefail
+            apt-get update -y
+            apt-get install -y python3 python3-pip python3-venv curl
+            python3 -m pip install --upgrade pip
+            python3 -m pip install poetry awscli
+            poetry --version
+            aws --version
 
-    - run:
-        name: Assume role (OIDC) and Terraform deploy
-        command: |
-          set -euo pipefail
+      - run:
+          name: Assume role (OIDC) and Terraform deploy
+          command: |
+            set -euo pipefail
 
-          if [ -z "<< parameters.role_arn >>" ]; then
-            echo "ERROR: role_arn parameter is empty."
-            exit 1
-          fi
-          if [ -z "${CIRCLE_OIDC_TOKEN:-}" ]; then
-            echo "ERROR: CIRCLE_OIDC_TOKEN not present. Ensure OIDC is enabled."
-            exit 1
-          fi
+            if [ -z "<< parameters.role_arn >>" ]; then
+              echo "ERROR: role_arn parameter is empty."
+              exit 1
+            fi
+            if [ -z "${CIRCLE_OIDC_TOKEN:-}" ]; then
+              echo "ERROR: CIRCLE_OIDC_TOKEN not present. Ensure OIDC is enabled."
+              exit 1
+            fi
 
-          ROLE_ARN="<< parameters.role_arn >>"
-          SESSION_NAME="circleci-oidc-$(date +%s)"
+            ROLE_ARN="<< parameters.role_arn >>"
+            SESSION_NAME="circleci-oidc-$(date +%s)"
 
-          echo "Attempting to assume role: ${ROLE_ARN}, session: ${SESSION_NAME}"
+            echo "Attempting to assume role: ${ROLE_ARN}, session: ${SESSION_NAME}"
 
-          CREDS_JSON=$(aws sts assume-role-with-web-identity \
-            --role-arn "${ROLE_ARN}" \
-            --role-session-name "${SESSION_NAME}" \
-            --web-identity-token "${CIRCLE_OIDC_TOKEN}" \
-            --duration-seconds 900)
+            CREDS_JSON=$(aws sts assume-role-with-web-identity \
+              --role-arn "${ROLE_ARN}" \
+              --role-session-name "${SESSION_NAME}" \
+              --web-identity-token "${CIRCLE_OIDC_TOKEN}" \
+              --duration-seconds 900)
 
-          export AWS_ACCESS_KEY_ID=$(echo "$CREDS_JSON" | python3 -c 'import sys, json; print(json.load(sys.stdin)["Credentials"]["AccessKeyId"])')
-          export AWS_SECRET_ACCESS_KEY=$(echo "$CREDS_JSON" | python3 -c 'import sys, json; print(json.load(sys.stdin)["Credentials"]["SecretAccessKey"])')
-          export AWS_SESSION_TOKEN=$(echo "$CREDS_JSON" | python3 -c 'import sys, json; print(json.load(sys.stdin)["Credentials"]["SessionToken"])')
+            export AWS_ACCESS_KEY_ID=$(echo "$CREDS_JSON" | python3 -c 'import sys, json; print(json.load(sys.stdin)["Credentials"]["AccessKeyId"])')
+            export AWS_SECRET_ACCESS_KEY=$(echo "$CREDS_JSON" | python3 -c 'import sys, json; print(json.load(sys.stdin)["Credentials"]["SecretAccessKey"])')
+            export AWS_SESSION_TOKEN=$(echo "$CREDS_JSON" | python3 -c 'import sys, json; print(json.load(sys.stdin)["Credentials"]["SessionToken"])')
 
-          aws sts get-caller-identity
+            aws sts get-caller-identity
 
-          echo "Listing S3 buckets (to verify assumed role):"
-          aws s3 ls
+            echo "Listing S3 buckets (to verify assumed role):"
+            aws s3 ls
 
-          cd infra/circleci-oidc
-          terraform init -input=false
-          terraform plan -input=false -out=tfplan
-          terraform apply -auto-approve tfplan
+            cd infra/circleci-oidc
+            terraform init -input=false
+            terraform plan -input=false -out=tfplan
+            terraform apply -auto-approve tfplan
 
 
       # - when:
