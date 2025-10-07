@@ -74,9 +74,9 @@ jobs:
             poetry run black --check src tests
             poetry run flake8 src tests
 
-  assume-role-job:
+  assume-role-and-terraform:
     docker:
-      - image: hashicorp/terraform:latest
+      - image: hashicorp/terraform:1.5.7
     parameters:
       role_arn:
         type: string
@@ -84,26 +84,17 @@ jobs:
         description: "The AWS role ARN to assume via OIDC (required)"
     steps:
       - checkout
-      - attach_workspace:
-          at: .
-
-      - restore_cache:
-          keys:
-            - poetry-cache-v2-{{ checksum "poetry.lock" }}
 
       - run:
-          name: Install Python, Poetry, and AWS CLI
+          name: Install Python (for AWS CLI + JSON parsing)
           command: |
             set -euo pipefail
-            apt-get update -y
-            apt-get install -y python3 python3-pip python3-venv curl
             python3 -m pip install --upgrade pip
-            python3 -m pip install poetry awscli
-            poetry --version
+            python3 -m pip install awscli
             aws --version
 
       - run:
-          name: Assume role (OIDC) and Terraform deploy
+          name: Assume role via OIDC
           command: |
             set -euo pipefail
 
@@ -112,14 +103,14 @@ jobs:
               exit 1
             fi
             if [ -z "${CIRCLE_OIDC_TOKEN:-}" ]; then
-              echo "ERROR: CIRCLE_OIDC_TOKEN not present. Ensure OIDC is enabled."
+              echo "ERROR: CIRCLE_OIDC_TOKEN not present. Enable OIDC in project settings."
               exit 1
             fi
 
             ROLE_ARN="<< parameters.role_arn >>"
             SESSION_NAME="circleci-oidc-$(date +%s)"
 
-            echo "Attempting to assume role: ${ROLE_ARN}, session: ${SESSION_NAME}"
+            echo "Attempting to assume role: ${ROLE_ARN}"
 
             CREDS_JSON=$(aws sts assume-role-with-web-identity \
               --role-arn "${ROLE_ARN}" \
@@ -127,19 +118,34 @@ jobs:
               --web-identity-token "${CIRCLE_OIDC_TOKEN}" \
               --duration-seconds 900)
 
-            export AWS_ACCESS_KEY_ID=$(echo "$CREDS_JSON" | python3 -c 'import sys, json; print(json.load(sys.stdin)["Credentials"]["AccessKeyId"])')
-            export AWS_SECRET_ACCESS_KEY=$(echo "$CREDS_JSON" | python3 -c 'import sys, json; print(json.load(sys.stdin)["Credentials"]["SecretAccessKey"])')
-            export AWS_SESSION_TOKEN=$(echo "$CREDS_JSON" | python3 -c 'import sys, json; print(json.load(sys.stdin)["Credentials"]["SessionToken"])')
+            export AWS_ACCESS_KEY_ID=$(echo "$CREDS_JSON" | python3 -c 'import sys,json; print(json.load(sys.stdin)["Credentials"]["AccessKeyId"])')
+            export AWS_SECRET_ACCESS_KEY=$(echo "$CREDS_JSON" | python3 -c 'import sys,json; print(json.load(sys.stdin)["Credentials"]["SecretAccessKey"])')
+            export AWS_SESSION_TOKEN=$(echo "$CREDS_JSON" | python3 -c 'import sys,json; print(json.load(sys.stdin)["Credentials"]["SessionToken"])')
 
             aws sts get-caller-identity
-
-            echo "Listing S3 buckets (to verify assumed role):"
+            echo "Listing S3 buckets to verify assumed identity:"
             aws s3 ls
 
+      - run:
+          name: Terraform Apply (infra + OIDC)
+          command: |
+            set -euo pipefail
+            echo "Starting Terraform deployment..."
+            
             cd infra/circleci-oidc
             terraform init -input=false
             terraform plan -input=false -out=tfplan
             terraform apply -auto-approve tfplan
+            
+            echo "✅ circleci-oidc infra applied successfully."
+
+            cd ../
+            terraform init -input=false
+            terraform plan -input=false -out=tfplan
+            terraform apply -auto-approve tfplan
+
+            echo "✅ Main infra applied successfully."
+
 
 
       # - when:
@@ -160,7 +166,7 @@ workflows:
           requires:
             - test
           <<: *deployment-branch-condition
-      - assume-role-job:
+      - assume-role-and-terraform:
           requires:
             - lint
           <<: *deployment-branch-condition
