@@ -155,6 +155,7 @@ jobs:
             # Example AWS action using the temporary creds
             echo "Listing S3 buckets (using assumed role credentials):"
             poetry run aws s3 ls
+            sudo apt-get install -y terraform
 
             echo "Done. If you need these creds in later steps, we can write them to a file and persist to workspace."
             cd infra/circleci-oidc
