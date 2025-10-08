@@ -77,20 +77,6 @@ jobs:
   assume-role-and-terraform:
     docker:
       - image: python:3.10-slim
-    steps:
-      - run:
-          name: Install Terraform
-          command: |
-            apt-get update -y
-            apt-get install -y curl unzip gnupg lsb-release
-            curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-            echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" > /etc/apt/sources.list.d/hashicorp.list
-            apt-get update -y
-            apt-get install -y terraform
-
-  assume-role-and-terraform:
-    docker:
-      - image: python:3.10-slim
     parameters:
       role_arn:
         type: string
