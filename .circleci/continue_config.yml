@@ -113,9 +113,6 @@ jobs:
             export AWS_SESSION_TOKEN=$(echo "$CREDS_JSON" | python3 -c 'import sys,json; print(json.load(sys.stdin)["Credentials"]["SessionToken"])')
             aws sts get-caller-identity
 
-      - run:
-          name: Terraform Apply (OIDC + Main Infra)
-          command: |
             set -euo pipefail
             echo "🚀 Deploying infra/circleci-oidc..."
             cd infra/circleci-oidc
@@ -131,9 +128,6 @@ jobs:
             terraform apply -auto-approve tfplan
             echo "✅ Main infra deployment complete"
 
-      - run:
-          name: Cleanup AWS creds
-          command: |
             unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN || true
             echo "🧹 Temporary AWS credentials cleared."
 
