@@ -1,13 +1,11 @@
 version: 2.1
 
-# This file is the "setup" phase only. It starts the agent work,
-# prepares & persists workspace, and then continues with continue_config.yml
-
+# Setup config — prepares workspace & continues to continue_config.yml
 setup: true
 
 orbs:
-  continuation: circleci/continuation@2.0.1 #https://circleci.com/developer/orbs/orb/circleci/continuation
-  path-filtering: circleci/path-filtering@2.0.4 #https://circleci.com/developer/orbs/orb/circleci/path-filtering
+  continuation: circleci/continuation@2.0.1
+  path-filtering: circleci/path-filtering@2.0.4
 
 jobs:
   prepare:
@@ -18,58 +16,35 @@ jobs:
 
       - restore_cache:
           keys:
-            - poetry-cache-v2-{{ checksum "poetry.lock" }}
+            - poetry-cache-v3-{{ checksum "poetry.lock" }}
+            - poetry-cache-v3-
 
       - run:
-          name: Install Poetry and project deps
+          name: Install Poetry and dependencies
           command: |
+            set -e
             python -m pip install --upgrade pip
             python -m pip install poetry
-            poetry config virtualenvs.create true --local
+            poetry config virtualenvs.in-project true  # creates .venv in repo
             poetry install --no-interaction --no-ansi
 
       - save_cache:
           paths:
-            - ~/.cache/pypoetry
-            - ~/.cache/pip
-          key: poetry-cache-v2-{{ checksum "poetry.lock" }}
+            - .venv
+          key: poetry-cache-v3-{{ checksum "poetry.lock" }}
 
       - persist_to_workspace:
           root: .
           paths:
             - pyproject.toml
             - poetry.lock
-
-  clear-caches:
-    docker:
-      - image: cimg/base:stable
-    steps:
-      - run:
-          name: Validate inputs
-          command: |
-            cd ~/.cache/
-            ls -a
+            - .venv  # persist venv so next jobs don’t reinstall
 
 workflows:
   build-setup:
     jobs:
       - prepare
-      # - path-filtering/set-parameters:
-      #     mapping: |
-      #       infra/.* deploy-terraform true
       - continuation/continue:
           requires:
             - prepare
-          # path to the config you want to continue into
           configuration_path: .circleci/continue_config.yml
-          # optional: parameters can be passed as a JSON string
-          # parameters: '{ "some_flag": true }'
-
-      # - clear-caches-approval:
-      #     type: approval
-
-      # # actual cache-deletion job; only runs after manual approval
-      # - clear-caches:
-      #     context: circleci
-      #     requires:
-      #       - clear-caches-approval

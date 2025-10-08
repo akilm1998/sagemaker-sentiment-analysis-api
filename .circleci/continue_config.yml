@@ -1,19 +1,15 @@
 version: 2.1
 
-# Pipeline parameter: pass a role ARN at pipeline trigger time
 parameters:
   role_arn:
     type: string
     default: "arn:aws:iam::313078327096:role/circleci-oidc-role"
     description: "Optional: role ARN to assume. If empty, the job will error and ask you to pass one."
-
   deploy-terraform:
     type: boolean
     default: false
 
 orbs:
-  continuation: circleci/continuation@2.0.1
-  path-filtering: circleci/path-filtering@2.0.4
   terraform: circleci/terraform@3.7.0
 
 executors:
@@ -36,19 +32,13 @@ jobs:
           at: .
       - restore_cache:
           keys:
-            - poetry-cache-v2-{{ checksum "poetry.lock" }}
-            # - poetry-cache-
-      - run:
-          name: Install Poetry and project deps
-          command: |
-            python -m pip install --upgrade pip
-            python -m pip install poetry
-            poetry config virtualenvs.create true --local
-            poetry install --no-interaction --no-ansi
+            - poetry-cache-v3-{{ checksum "poetry.lock" }}
+            - poetry-cache-v3-
       - run:
           name: Run tests
           command: |
-            poetry run pytest -q
+            source .venv/bin/activate
+            pytest -q
 
   lint:
     executor: python-executor
@@ -58,21 +48,14 @@ jobs:
           at: .
       - restore_cache:
           keys:
-            - poetry-cache-v2-{{ checksum "poetry.lock" }}
-            # - poetry-cache-
+            - poetry-cache-v3-{{ checksum "poetry.lock" }}
+            - poetry-cache-v3-
       - run:
-          name: Install Poetry and lint deps
+          name: Lint code (Black + Flake8)
           command: |
-            python -m pip install --upgrade pip
-            python -m pip install poetry
-            poetry config virtualenvs.create true --local
-            poetry install --no-interaction --no-ansi
-      - run:
-          name: Lint code (fail fast)
-          command: |
-            set -e
-            poetry run black --check src tests
-            poetry run flake8 src tests
+            source .venv/bin/activate
+            black --check src tests
+            flake8 src tests
 
   assume-role-and-terraform:
     docker:
@@ -81,41 +64,30 @@ jobs:
       role_arn:
         type: string
         default: ""
-        description: "The AWS role ARN to assume via OIDC (required)"
+        description: "AWS role ARN to assume via OIDC (required)"
     steps:
       - checkout
 
       - run:
-          name: Install dependencies (AWS CLI + Terraform)
+          name: Install AWS CLI and Terraform
           command: |
             set -euo pipefail
             export DEBIAN_FRONTEND=noninteractive
-
-            echo "Installing required system packages..."
             apt-get update -y
             apt-get install -y curl unzip gnupg lsb-release software-properties-common
-
-            echo "Installing AWS CLI..."
-            python3 -m pip install --upgrade pip
-            python3 -m pip install awscli
-
-            echo "Adding HashiCorp repo and installing Terraform..."
+            python3 -m pip install --upgrade pip awscli
             curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
             echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" \
               > /etc/apt/sources.list.d/hashicorp.list
             apt-get update -y
             apt-get install -y terraform
-
-            echo "✅ Installed versions:"
-            python3 --version
-            aws --version
             terraform version
+            aws --version
 
       - run:
           name: Assume AWS Role via OIDC
           command: |
             set -euo pipefail
-
             if [ -z "<< parameters.role_arn >>" ]; then
               echo "ERROR: role_arn parameter is empty."
               exit 1
@@ -124,62 +96,46 @@ jobs:
               echo "ERROR: CIRCLE_OIDC_TOKEN not present. Enable OIDC in CircleCI project settings."
               exit 1
             fi
-
             ROLE_ARN="<< parameters.role_arn >>"
             SESSION_NAME="circleci-oidc-$(date +%s)"
             echo "Assuming role: ${ROLE_ARN}"
-
             CREDS_JSON=$(aws sts assume-role-with-web-identity \
               --role-arn "${ROLE_ARN}" \
               --role-session-name "${SESSION_NAME}" \
               --web-identity-token "${CIRCLE_OIDC_TOKEN}" \
               --duration-seconds 900)
-
             export AWS_ACCESS_KEY_ID=$(echo "$CREDS_JSON" | python3 -c 'import sys,json; print(json.load(sys.stdin)["Credentials"]["AccessKeyId"])')
             export AWS_SECRET_ACCESS_KEY=$(echo "$CREDS_JSON" | python3 -c 'import sys,json; print(json.load(sys.stdin)["Credentials"]["SecretAccessKey"])')
             export AWS_SESSION_TOKEN=$(echo "$CREDS_JSON" | python3 -c 'import sys,json; print(json.load(sys.stdin)["Credentials"]["SessionToken"])')
-
             aws sts get-caller-identity
 
       - run:
-          name: Terraform Apply (infra/circleci-oidc)
+          name: Terraform Apply (OIDC + Main Infra)
           command: |
             set -euo pipefail
+            echo "🚀 Deploying infra/circleci-oidc..."
             cd infra/circleci-oidc
             terraform init -input=false
             terraform plan -input=false -out=tfplan
             terraform apply -auto-approve tfplan
-            echo "✅ Deployed circleci-oidc infrastructure"
+            echo "circleci-oidc deployment complete"
 
-      - run:
-          name: Terraform Apply (main infra)
-          command: |
-            set -euo pipefail
+            echo "🚀 Deploying main infra..."
             cd ../
             terraform init -input=false
             terraform plan -input=false -out=tfplan
             terraform apply -auto-approve tfplan
-            echo "✅ Main infrastructure deployed successfully"
+            echo "Main infra deployment complete"
 
       - run:
           name: Cleanup AWS creds
           command: |
             unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN || true
-            echo "🧹 Temporary AWS credentials cleared."
-
-
-
-      # - when:
-      #     condition: << parameters.deploy-terraform >>
-      #     steps:
-      #       - run:
-      #           name: Terraform Deploy (OIDC infra then main infra)
-      #           command: |
-      #             set -euo pipefail
+            echo "Done."
 
 workflows:
   version: 2
-  verification:
+  main-pipeline:
     jobs:
       - test:
           <<: *deployment-branch-condition
