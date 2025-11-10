@@ -25,3 +25,5 @@ override.tf.json
 
 # Keep lock file committed
 !.terraform.lock.hcl
+
+*.archive
